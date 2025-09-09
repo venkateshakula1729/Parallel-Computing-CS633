@@ -1,6 +1,6 @@
 # 3D Time-Series Data Analysis with MPI
 
-![Project Banner](./assets/banner.png)
+![Project Banner](Code/assets/banner.png)
 
 ## 📋 Overview
 
@@ -111,18 +111,18 @@ python3 visualize.py ../results/job1_results/benchmark_results.csv ../assets/job
 
 The implementation shows strong scaling up to 24 processes, after which performance decreases due to system limitations:
 
-![Scaling Results](.Code/assets/final_results_images/job5and7/scaling_combined/scaling_combined_data_64_64_96_7.bin.png)
+![Scaling Results](Code/assets/final_results_images/job5and7/scaling_combined/scaling_combined_data_64_64_96_7.bin.png)
 
 ### Implementation Comparison (16 Processes)
 
 Performance comparison of different implementation strategies:
 
-![Implementation Comparison](.Code/assets/final_results_images/job2/implementation_comparisons/impl_comparison_data_64_64_96_7.bin_16p.png)
+![Implementation Comparison](Code/assets/final_results_images/job2/implementation_comparisons/impl_comparison_data_64_64_96_7.bin_16p.png)
 
 ### With Varying Dataset Sizes
 Comparison of MPI_Isend, Independent IO, and the hybrid approach shows that the hybrid implementation consistently performs best across all dataset sizes.
 
-![Dataset Scaling Comparison](.Code/assets/final_results_images/job5and7/dataset_combined/dataset_implementation_comparison_16p.png)
+![Dataset Scaling Comparison](Code/assets/final_results_images/job5and7/dataset_combined/dataset_implementation_comparison_16p.png)
 
 ## License
 
