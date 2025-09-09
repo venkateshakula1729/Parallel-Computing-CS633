@@ -1,133 +1,129 @@
-# Parallel-Computing-CS633
+# 3D Time-Series Data Analysis with MPI
 
-# Code Description
+![Project Banner](./assets/banner.png)
 
-## 1. Overview of the Code
+## 📋 Overview
 
-The program implements a parallel computing solution for processing time series data of 3D volumes using MPI. The workflow can be summarized as follows:
+This repository contains an MPI-based C implementation to efficiently detect local minima and maxima in large 3D time-series datasets by decomposition of the spatial domain and adaptive I/O and communication strategies.
 
-1. **Initialization**: Parse command line arguments and initialize MPI environment
-2. **Domain Decomposition**: Each process calculates its own subdomain boundaries including ghost regions
-3. **Data Loading**: Either parallel file reading or root process reads and distributes data
-4. **Data Processing**: Each process analyzes its subdomain to identify:
-   - Local minima and maxima at each time step
-   - Global minimum and maximum at each time step
-5. **Result Collection**: Reduction operations aggregate results from all processes
-6. **Output Generation**: Root process writes results to the specified output file
+Key features:
 
-The code prioritizes performance through optimized I/O strategies, efficient domain decomposition with ghost regions, and non-blocking communication patterns.
+* **3D Domain Decomposition** with ghost (halo) zones for boundary handling
+* **Adaptive I/O Strategy**: independent parallel I/O via MPI file views (≤24 processes) and root-based non-blocking distribution (>24 processes)
+* **Local Extrema Detection** purely in parallel—no communication during core computation
+* **Global Aggregation** via MPI collective operations (MPI\_Reduce)
+* **Benchmarking & Visualization** scripts to compare performance of various implementations
 
-## 2. Detailed Description of Important Components
+## 📂 Project Structure
 
-### Domain Decomposition Function
-
-```c
-void calculateSubDomainBoundaries(int rank, int pX, int pY, int pZ, int nX, int nY, int nZ, SubDomain* subdomain)
+```
+code
+├── src/
+│   ├── send.c                       # Basic implementation using blocking MPI Send
+│   ├── isend.c                      # Implementation using non-blocking MPI Isend
+│   ├── bsend.c                      # Implementation using buffered MPI Bsend
+│   ├── collectiveIO.c               # Implementation using collective MPI I/O
+│   ├── collectiveIO_derData.c       # Enhanced collective I/O with file view
+│   ├── independentIO.c              # Implementation using independent I/O
+│   ├── independentIO_derData.c      # Independent I/O with file view
+│   ├── independentIO_derData_and_isend.c  # Best hybrid implementation
+│   ├── Makefile                     # Compilation instructions
+│   └── bin/                         # Compiled executables
+├── jobs/
+│   ├── job1.sh                      # Job script for benchmark 1
+│   ├── job2.sh                      # Job script for benchmark 2
+│   ├── ...
+│   └── job7.sh                      # Job script for best method
+├── results/
+│   └── job*_results/                # Result directories
+│       ├── raw/                     # Raw output files
+│       └── benchmark_results.csv    # Performance metrics
+├── scripts/
+│   └── visualize.py                 # Visualization script
+└── assets/
+    └── job*_images/                 # Generated visualizations
 ```
 
-**Logic**:
-This function calculates the portion of the 3D domain assigned to each process, including ghost regions for proper local minima/maxima detection. It first determines the process's position in the 3D process grid, then calculates its subdomain boundaries and adds ghost cells where needed (except at global domain boundaries).
+## 🛠️ Prerequisites
 
-**Arguments**:
-- `rank`: Process ID in the MPI communicator
-- `pX, pY, pZ`: Number of processes in each dimension
-- `nX, nY, nZ`: Total grid size in each dimension
-- `subdomain`: Output structure to store calculated boundaries
+* MPI implementation (e.g., OpenMPI or MPICH)
+* C compiler (gcc or clang)
+* Python 3 with matplotlib and pandas (for visualization)
+* Slurm or another job scheduler (optional, for batch runs)
 
-**Outputs**:
-Populates the `subdomain` structure with:
-- Regular domain boundaries (`startX/Y/Z`, `endX/Y/Z`, `width/height/depth`)
-- Extended domain boundaries including ghost regions (`tempStartX/Y/Z`, `tempEndX/Y/Z`, `tempWidth/height/depth`)
+## 🚀 Build & Run
 
-### Optimized Parallel I/O
+### 1. Compile All Implementations
 
-```c
-float* readInputDataParallel_Level2(const char* inputFile, const SubDomain* subdomain,
-                                   int nX, int nY, int nZ, int timeSteps)
+```bash
+cd src/
+make all
 ```
 
-**Logic**:
-Implements efficient parallel I/O using MPI-IO with derived datatypes. Each process reads only its required portion of the file (including ghost regions) directly into its local memory. The function creates a custom MPI datatype that represents the 4D subarray (3D space + time) required by the process.
+This produces executables in `src/bin/` for each variant.
 
-**Arguments**:
-- `inputFile`: Path to the input data file
-- `subdomain`: Process's subdomain information
-- `nX, nY, nZ`: Global domain dimensions
-- `timeSteps`: Number of time steps in the data
+### 2. Run Best-Performing Method
 
-**Outputs**:
-Returns a float array containing the process's portion of the data (including ghost cells) for all time steps.
-
-### Data Distribution
-
-```c
-float* distributeData(int rank, const SubDomain* subdomain, float* globalData,
-                     int nX, int nY, int nZ, int timeSteps, int pX, int pY, int pZ)
+```bash
+cd jobs/
+sbatch job7.sh
 ```
 
-**Logic**:
-Used for scenarios with many processes where parallel I/O might be inefficient. The root process reads the entire dataset and distributes appropriate portions to each process using non-blocking communication. This function employs `MPI_Isend` to overlap communication and uses separate buffers for each receiving process to avoid data corruption.
+* Outputs are placed in `results/job7_results/raw/`.
+* Naming: `output_NX_NY_NZ_TIMESTEPS_PROCS.txt`
 
-**Arguments**:
-- `rank`: Process ID in the MPI communicator
-- `subdomain`: Process's subdomain information
-- `globalData`: Complete dataset (only used by rank 0)
-- `nX, nY, nZ`: Global domain dimensions
-- `timeSteps`: Number of time steps
-- `pX, pY, pZ`: Process grid dimensions
+### 3. Run Benchmarks for All Variants
 
-**Outputs**:
-Returns a float array containing the process's portion of the data for all time steps.
-
-### Local Data Processing
-
-```c
-void processLocalData(float* localData, const SubDomain* subdomain, TimeSeriesResults* results, int timeSteps)
+```bash
+cd jobs/
+for job in job1.sh job2.sh job3.sh job4.sh job5.sh job6.sh; do
+  sbatch "$job"
+done
 ```
 
-**Logic**:
-Analyzes the local subdomain data to count local minima/maxima and find extreme values at each time step. For each point in the actual subdomain (excluding ghost cells), it checks if the point is a local minimum or maximum by comparing with its six neighbors. The function also tracks global minimum and maximum values.
+* Each creates `results/jobX_results/benchmark_results.csv`.
 
-**Arguments**:
-- `localData`: Process's portion of the data including ghost regions
-- `subdomain`: Process's subdomain information
-- `results`: Structure to store computation results
-- `timeSteps`: Number of time steps
+### 4. Generate Visualizations
 
-**Outputs**:
-Populates the `results` structure with counts of local minima/maxima and extreme values for each time step.
-
-### Local Extrema Detection
-
-```c
-bool isLocalMinimum(float* data, int x, int y, int z, int width, int height, int depth, int time, int timeSteps)
-bool isLocalMaximum(float* data, int x, int y, int z, int width, int height, int depth, int time, int timeSteps)
+```bash
+cd scripts/
+python3 visualize.py ../results/job1_results/benchmark_results.csv ../assets/job1_images
+# Repeat for job2 through job6
 ```
 
-**Logic**:
-These functions determine if a point is a local minimum or maximum by comparing its value with all six neighboring points (along x, y, and z axes). For a minimum, the point must be strictly smaller than all neighbors; for a maximum, strictly larger.
+## 🔍 Implementation Variants
 
-**Arguments**:
-- `data`: Local data array
-- `x, y, z`: Coordinates of the point to check
-- `width, height, depth`: Dimensions of the local data volume
-- `time`: Current time step being processed
-- `timeSteps`: Total number of time steps
+| Script                          | Description                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
+| `send.c`                        | Blocking MPI\_Send based data distribution                   |
+| `isend.c`                       | Non-blocking MPI\_Isend distribution                         |
+| `bsend.c`                       | Buffered MPI\_Bsend distribution                             |
+| `collectiveIO.c`                | Collective MPI I/O without file view                         |
+| `collectiveIO_derData.c`        | Collective I/O with derived datatypes and file view          |
+| `independentIO.c`               | Independent MPI I/O without file view                        |
+| `independentIO_derData.c`       | Independent I/O with derived datatypes and file view         |
+| `independentIO_derData_isend.c` | Hybrid best-performing: independent I/O & non-blocking sends |
 
-**Outputs**:
-Returns `true` if the point is a local minimum/maximum, `false` otherwise.
 
-### Results Aggregation and Output
+## Performance Analysis
 
-```c
-// Result reduction and output sections in main()
-```
+### Scaling Performance
 
-**Logic**:
-After local processing, the code uses `MPI_Reduce` operations to aggregate results across all processes. For minima/maxima counts, it uses `MPI_SUM` to add up all local counts. For global minimum and maximum values, it uses `MPI_MIN` and `MPI_MAX` operations respectively. Finally, timing information is gathered using `MPI_MAX` to report the worst-case performance.
+The implementation shows strong scaling up to 24 processes, after which performance decreases due to system limitations:
 
-The root process (rank 0) then writes the consolidated results to the specified output file in the required format.
+![Scaling Results](./assets/final_results_images/job5and7/scaling_combined/scaling_combined_data_64_64_96_7.bin.png)
 
-### Memory Management
+### Implementation Comparison (16 Processes)
 
-The code employs a structured approach to memory management with dedicated allocation and deallocation functions for result data structures. It includes error checking to prevent memory leaks and uses temporary buffers for efficient communication.
+Performance comparison of different implementation strategies:
+
+![Implementation Comparison](./assets/final_results_images/job2/implementation_comparisons/impl_comparison_data_64_64_96_7.bin_16p.png)
+
+### With Varying Dataset Sizes
+Comparison of MPI_Isend, Independent IO, and the hybrid approach shows that the hybrid implementation consistently performs best across all dataset sizes.
+
+![Dataset Scaling Comparison](./assets/final_results_images/job5and7/dataset_combined/dataset_implementation_comparison_16p.png)
+
+## License
+
+[MIT License](LICENSE)
